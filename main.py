@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 from firestore import db
-import handlers
+from handlers import start, handle_button  # Змінено імпорт
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -11,9 +11,8 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 def main():
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     
-    # Реєстрація обробників
-    application.add_handler(CommandHandler("start", handlers.start))
-    application.add_handler(CallbackQueryHandler(handlers.handle_button))
+    application.add_handler(CommandHandler("start", start))  # Без handlers.
+    application.add_handler(CallbackQueryHandler(handle_button))  # Без handlers.
     
     application.run_polling()
 

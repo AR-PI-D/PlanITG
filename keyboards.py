@@ -78,7 +78,13 @@ def edit_day_keyboard(schedule_ids, subjects, selected_week):
     for index, subject_id in enumerate(schedule_ids):
         subject = next((s for s in subjects if s["id"] == subject_id), None)
         btn_text = f"{index+1}. {subject['name']}" if subject else f"{index+1} Помилка"
-        keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"edit_lesson_{index}")])
+        keyboard.append([
+            InlineKeyboardButton(btn_text, callback_data=f"edit_lesson_{index}"),
+            InlineKeyboardButton("🗑️", callback_data=f"delete_lesson_{index}")
+            ])
+    
+    # Нова кнопка для додавання пари
+    keyboard.append([InlineKeyboardButton("➕ Додати пару", callback_data="add_lesson")])  # <-- Додано
     
     # Кнопки тижнів
     week_btns = [
