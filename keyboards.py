@@ -1,0 +1,107 @@
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+# Головне меню
+def main_menu():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Розклад 🗓", callback_data='schedule')],
+        [InlineKeyboardButton("Налаштування ⚙️", callback_data='settings')]
+    ])
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+# Клавіатура з днями тижня (без кнопки "Змінити тиждень")
+def days_keyboard():
+    days = [
+        ("Понеділок ☕️", "понеділок"),
+        ("Вівторок 📘", "вівторок"),
+        ("Середа 🧠", "середа"),
+        ("Четвер 💼", "четвер"),
+        ("П'ятниця 🎊", "п'ятниця"),
+        ("Субота 🛌", "субота"),
+        ("Неділя 🌅", "неділя")
+    ]
+    keyboard = [
+        [InlineKeyboardButton(text, callback_data=data)] for text, data in days
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+# Клавіатура для меню обраного дня (з кнопкою "Змінити тиждень")
+def day_menu_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("✏️ Змінити тиждень", callback_data="change_week")],
+        [InlineKeyboardButton("↩️ Назад до днів", callback_data="back_to_days")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+
+# Клавіатура для вибору предмета для заміни
+def subjects_keyboard(subjects):
+    keyboard = [
+        [InlineKeyboardButton(subject["name"], callback_data=f"change_{subject['id']}")]
+        for subject in subjects
+    ]
+    keyboard.append([InlineKeyboardButton("↩️ Назад", callback_data="back_to_day")])
+    return InlineKeyboardMarkup(keyboard)
+
+# Клавіатура підтвердження заміни
+def confirm_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Підтвердити", callback_data="confirm_change")],
+        [InlineKeyboardButton("❌ Скасувати", callback_data="cancel_change")]
+    ])
+
+def weeks_keyboard():
+    weeks = [
+        ("Тиждень 1", "week1"),
+        ("Тиждень 2", "week2"),
+        ("Тиждень 3", "week3"),
+        ("Тиждень 4", "week4")
+    ]
+    keyboard = [
+        [InlineKeyboardButton(text, callback_data=data)] for text, data in weeks
+    ]
+    keyboard.append([InlineKeyboardButton("↩️ Назад до днів", callback_data="back_to_days")])
+    return InlineKeyboardMarkup(keyboard)
+
+def day_menu_keyboard(has_schedule: bool):
+    buttons = [
+        [InlineKeyboardButton("✏️ Змінити розклад", callback_data="edit_schedule")]
+    ]
+    buttons.append([InlineKeyboardButton("↩️ Назад до днів", callback_data="back_to_days")])
+    return InlineKeyboardMarkup(buttons)
+
+def edit_day_keyboard(schedule_ids, subjects, selected_week):
+    keyboard = []
+    
+    # Кнопки уроків
+    for index, subject_id in enumerate(schedule_ids):
+        subject = next((s for s in subjects if s["id"] == subject_id), None)
+        btn_text = f"{index+1}. {subject['name']}" if subject else f"{index+1} Помилка"
+        keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"edit_lesson_{index}")])
+    
+    # Кнопки тижнів
+    week_btns = [
+        InlineKeyboardButton(
+            f"{i+1} {'✅' if f'week{i+1}' == selected_week else ''}",
+            callback_data=f"select_week_{i+1}"
+        ) for i in range(4)
+    ]
+    keyboard.append(week_btns)
+    
+    # Навігація
+    keyboard.append([
+        InlineKeyboardButton("◀️ Назад", callback_data="back_to_day"),
+        InlineKeyboardButton("🏠 Додому", callback_data="main_menu")
+    ])
+    
+    return InlineKeyboardMarkup(keyboard)
+
+
+def all_subjects_keyboard(subjects):
+    keyboard = [
+        [InlineKeyboardButton(subject["name"], callback_data=f"replace_lesson_{subject['id']}")]
+        for subject in subjects
+    ]
+    keyboard.append([InlineKeyboardButton("↩️ Назад", callback_data="back_to_lessons")])
+    return InlineKeyboardMarkup(keyboard)
