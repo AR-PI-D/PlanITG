@@ -25,16 +25,6 @@ def days_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# Клавіатура для меню обраного дня (з кнопкою "Змінити тиждень")
-def day_menu_keyboard():
-    keyboard = [
-        [InlineKeyboardButton("✏️ Змінити тиждень", callback_data="change_week")],
-        [InlineKeyboardButton("↩️ Назад до днів", callback_data="back_to_days")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-
-
 # Клавіатура для вибору предмета для заміни
 def subjects_keyboard(subjects):
     keyboard = [
@@ -44,12 +34,6 @@ def subjects_keyboard(subjects):
     keyboard.append([InlineKeyboardButton("↩️ Назад", callback_data="back_to_day")])
     return InlineKeyboardMarkup(keyboard)
 
-# Клавіатура підтвердження заміни
-def confirm_keyboard():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Підтвердити", callback_data="confirm_change")],
-        [InlineKeyboardButton("❌ Скасувати", callback_data="cancel_change")]
-    ])
 
 def weeks_keyboard():
     weeks = [
