@@ -16,8 +16,18 @@ from firebase_admin import firestore
 
 DAYS_ORDER = ["понеділок", "вівторок", "середа", "четвер", "п'ятниця", "субота", "неділя"]
 
-async def format_schedule_text(user_data: dict, day: str, selected_week: str) -> str:
+def get_current_week(start_date: str) -> int:
+    """Розраховуємо поточний навчальний тиждень"""
+    today = datetime.now().date()
+    start = datetime.strptime(start_date, "%Y-%m-%d").date()
+    delta = (today - start).days
+    
+    if delta < 0:
+        return 1
+    return (delta // 7) % 4 + 1
 
+async def format_schedule_text(user_data: dict, day: str, selected_week: str) -> str:
+    """Форматуємо текст розкладу з HTML розміткою"""
     day_index = DAYS_ORDER.index(day)
     schedule_ids = user_data["schedule"]["schedule"][day_index].get(selected_week, [])
     
@@ -47,23 +57,57 @@ async def format_schedule_text(user_data: dict, day: str, selected_week: str) ->
         entry = f'{idx}. <a href="{subject["zoom_link"]}">{subject["name"]}</a> - {teacher_name}'
         schedule_entries.append(entry)
         
-    return "\n".join(schedule_entries)
+    return f"🗓 <b>Тиждень {selected_week[-1]}</b>\n" + "\n".join(schedule_entries)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обробник команди /start з автоматичним виводом сьогоднішнього розкладу"""
     user_id = update.effective_user.id
     user_ref = db.collection("TG_USERS").document(str(user_id))
+    user_doc = user_ref.get()
     
-    if not user_ref.get().exists:
+    # Створення нового користувача
+    if not user_doc.exists:
         user_ref.set({
             "schedule": default_schedule,
             "telegram_id": user_id,
             "created_at": firestore.SERVER_TIMESTAMP,
             "starting_week": None
         })
+        text = "🔄 Будь ласка, встановіть дату початку семестру в налаштуваннях!"
+        return await update.message.reply_text(text, reply_markup=settings_keyboard())
     
-    await update.message.reply_text("🏠 Головне меню:", reply_markup=main_menu())
+    user_data = user_doc.to_dict()
+    
+    # Перевірка наявності starting_week
+    if not user_data.get("starting_week"):
+        text = "⚠️ Спочатку встановіть дату початку семестру!"
+        return await update.message.reply_text(text, reply_markup=settings_keyboard())
+    
+    try:
+        # Розрахунок поточних даних
+        today = datetime.now()
+        current_week = get_current_week(user_data["starting_week"])
+        current_day = DAYS_ORDER[today.weekday()]
+
+        # Форматування розкладу
+        schedule_text = await format_schedule_text(
+            user_data, 
+            current_day,
+            f"week{current_week}"
+        )
+        
+        # Повідомлення з розкладом
+        await update.message.reply_text(
+            f"📌 <b>Сьогодні ({today.strftime('%d.%m.%Y')})</b>\n{schedule_text}",
+            reply_markup=main_menu(),
+            parse_mode="HTML"
+        )
+        
+    except Exception as e:
+        await update.message.reply_text("❌ Помилка при завантаженні розкладу!")
 
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обробник всіх інлайн кнопок"""
     query = update.callback_query
     await query.answer()
     data = query.data
@@ -143,6 +187,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
          )
 
 async def handle_day_selection(query, context, day, user_id):
+    """Обробка вибору дня"""
     context.user_data.update({"current_day": day, "selected_week": "week1"})
     user_data = db.collection("TG_USERS").document(str(user_id)).get().to_dict()
     schedule_text = await format_schedule_text(user_data, day, "week1")
@@ -153,6 +198,7 @@ async def handle_day_selection(query, context, day, user_id):
     )
 
 async def show_edit_menu(query, context, user_id):
+    """Показуємо меню редагування"""
     user_data = db.collection("TG_USERS").document(str(user_id)).get().to_dict()
     day_index = DAYS_ORDER.index(context.user_data["current_day"])
     selected_week = context.user_data.get("selected_week", "week1")
@@ -163,40 +209,25 @@ async def show_edit_menu(query, context, user_id):
         reply_markup=edit_day_keyboard(schedule_ids, user_data["schedule"]["subjects"], selected_week)
     )
 
-async def return_to_day_view(query, context, user_id):
-    user_data = db.collection("TG_USERS").document(str(user_id)).get().to_dict()
-    schedule_text = await format_schedule_text(user_data, context.user_data["current_day"], "week1")
-    await query.edit_message_text(
-        text=f"📚 {context.user_data['current_day'].capitalize()} (week1):\n{schedule_text}",
-        reply_markup=day_menu_keyboard(True),
-        parse_mode="HTML"
-    )
-
 async def show_settings_menu(query, context, user_id):
+    """Показуємо меню налаштувань"""
     await query.edit_message_text(
         text="⚙️ Налаштування:",
         reply_markup=settings_keyboard()
     )
 
-# handlers.py
-# =============== handlers.py ===============
-
 async def _update_starting_week(context: ContextTypes.DEFAULT_TYPE, new_date: str, user_id: int, message=None, query=None):
-    """Уніфікована функція для оновлення дати"""
+    """Оновлення дати початку семестру"""
     try:
-        # Перевірка коректності дати
         datetime.strptime(new_date, "%Y-%m-%d")
         user_ref = db.collection("TG_USERS").document(str(user_id))
         
-        # Оновлення дати в базі
         user_ref.update({'starting_week': new_date})
         user_data = user_ref.get().to_dict()
         current_date = user_data.get('starting_week', new_date)
         
-        # Форматування відповіді
         response_text = f"📅 Поточна дата: {current_date}"
         
-        # Відправка повідомлення
         if query:
             await query.edit_message_text(response_text, reply_markup=starting_week_keyboard())
         elif message:
@@ -206,20 +237,11 @@ async def _update_starting_week(context: ContextTypes.DEFAULT_TYPE, new_date: st
         error_msg = "❌ Невірний формат даті!"
         await message.reply_text(error_msg) if message else await query.answer(error_msg)
 
-
-# Оновлені обробники
 async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обробка текстового вводу для дати"""
     await _update_starting_week(
         context=context,
         new_date=update.message.text,
         user_id=update.effective_user.id,
         message=update.message
-    )
-
-async def set_today_as_starting_week(query, context: ContextTypes.DEFAULT_TYPE):
-    await _update_starting_week(
-        context=context,
-        new_date=datetime.now().strftime("%Y-%m-%d"),
-        user_id=query.from_user.id,
-        query=query
     )
