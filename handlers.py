@@ -9,7 +9,8 @@ from keyboards import (
     all_subjects_keyboard,
     day_menu_keyboard,
     settings_keyboard,
-    starting_week_keyboard
+    starting_week_keyboard,
+    repeat_keyboard
 )
 from default_schedule import default_schedule
 from firebase_admin import firestore
@@ -185,6 +186,22 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
              user_id=user_id,
              query=query
          )
+    elif data == 'set_repeat':
+        user_data = db.collection("TG_USERS").document(str(user_id)).get().to_dict()
+        current_repeat = user_data.get("schedule", {}).get("repeat", 1)
+        await query.edit_message_text(
+            "🔢 Оберіть кількість тижнів у циклі:",
+            reply_markup=repeat_keyboard(current_repeat)
+        )
+    
+    elif data.startswith('set_repeat_'):
+        new_repeat = int(data.split('_')[-1])
+        user_ref = db.collection("TG_USERS").document(str(user_id))
+        user_ref.update({"schedule.repeat": new_repeat})
+        
+        await query.answer(f"✅ Встановлено {new_repeat} тижнів!")
+        await show_settings_menu(query, context, user_id)
+        
 
 async def handle_day_selection(query, context, day, user_id):
     """Обробка вибору дня"""
@@ -210,10 +227,13 @@ async def show_edit_menu(query, context, user_id):
     )
 
 async def show_settings_menu(query, context, user_id):
-    """Показуємо меню налаштувань"""
+    """Оновлений обробник меню налаштувань"""
+    user_data = db.collection("TG_USERS").document(str(user_id)).get().to_dict()
+    current_repeat = user_data.get("schedule", {}).get("repeat", 1)
+    
     await query.edit_message_text(
         text="⚙️ Налаштування:",
-        reply_markup=settings_keyboard()
+        reply_markup=settings_keyboard(current_repeat)
     )
 
 async def _update_starting_week(context: ContextTypes.DEFAULT_TYPE, new_date: str, user_id: int, message=None, query=None):

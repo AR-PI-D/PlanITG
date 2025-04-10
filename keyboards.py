@@ -104,14 +104,22 @@ def all_subjects_keyboard(subjects):
 
 # keyboards.py
 
-def settings_keyboard():
+def settings_keyboard(current_repeat: int = 1):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Поточна дата 📅", callback_data='set_starting_week')],  # Змінено текст
+        [InlineKeyboardButton("Поточна дата 📅", callback_data='set_starting_week')],
+        [InlineKeyboardButton(f"Кількість тижнів 🔄 ({current_repeat})", callback_data='set_repeat')],  # Нова кнопка
         [InlineKeyboardButton("↩️ Назад", callback_data='main_menu')]
     ])
-# keyboards.py
 
-# keyboards.py
+def repeat_keyboard(current_repeat: int):
+    buttons = [
+        [InlineKeyboardButton(
+            f"{i} {'✅' if i == current_repeat else ''}", 
+            callback_data=f'set_repeat_{i}'
+        )] for i in range(1, 5)
+    ]
+    buttons.append([InlineKeyboardButton("↩️ Назад", callback_data='settings')])
+    return InlineKeyboardMarkup(buttons)
 
 def starting_week_keyboard():  # Немає аргументів у визначенні
     buttons = [
