@@ -17,15 +17,17 @@ from firebase_admin import firestore
 
 DAYS_ORDER = ["понеділок", "вівторок", "середа", "четвер", "п'ятниця", "субота", "неділя"]
 
-def get_current_week(start_date: str) -> int:
-    """Розраховуємо поточний навчальний тиждень"""
+def get_current_week(start_date: str, repeat: int) -> int:
+    """Розраховує поточний тиждень з урахуванням циклічності"""
     today = datetime.now().date()
     start = datetime.strptime(start_date, "%Y-%m-%d").date()
     delta = (today - start).days
     
     if delta < 0:
         return 1
-    return (delta // 7) % 4 + 1
+    
+    total_weeks = (delta // 7) + 1
+    return ((total_weeks - 1) % repeat) + 1
 
 async def format_schedule_text(user_data: dict, day: str, selected_week: str) -> str:
     """Форматуємо текст розкладу з HTML розміткою"""
@@ -85,19 +87,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text(text, reply_markup=settings_keyboard())
     
     try:
-        # Розрахунок поточних даних
+        repeat = user_data.get("schedule", {}).get("repeat", 1)
         today = datetime.now()
-        current_week = get_current_week(user_data["starting_week"])
+        current_week = get_current_week(user_data["starting_week"], repeat)
         current_day = DAYS_ORDER[today.weekday()]
-
-        # Форматування розкладу
+        
         schedule_text = await format_schedule_text(
             user_data, 
             current_day,
             f"week{current_week}"
         )
         
-        # Повідомлення з розкладом
         await update.message.reply_text(
             f"📌 <b>Сьогодні ({today.strftime('%d.%m.%Y')})</b>\n{schedule_text}",
             reply_markup=main_menu(),
