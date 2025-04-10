@@ -1,13 +1,18 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-# Головне меню
+
 def main_menu():
     return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("← Попередній", callback_data='prev_day'),
+            InlineKeyboardButton("Наступний →", callback_data='next_day')
+        ],
+        [
+            InlineKeyboardButton("Сьогодні 🏠", callback_data='today')
+        ],
         [InlineKeyboardButton("Розклад 🗓", callback_data='schedule')],
         [InlineKeyboardButton("Налаштування ⚙️", callback_data='settings')]
     ])
-
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 # Клавіатура з днями тижня (без кнопки "Змінити тиждень")
 def days_keyboard():

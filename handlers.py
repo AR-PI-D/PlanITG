@@ -1,6 +1,7 @@
-from telegram import Update
+from telegram import Update, CallbackQuery, Message  # Додаємо імпорти
+from typing import Union  # Для аннотації типів
 from telegram.ext import ContextTypes, MessageHandler, filters
-from datetime import datetime
+from datetime import datetime, timedelta
 from firestore import db
 from keyboards import (
     main_menu, 
@@ -35,7 +36,7 @@ async def format_schedule_text(user_data: dict, day: str, selected_week: str) ->
     schedule_ids = user_data["schedule"]["schedule"][day_index].get(selected_week, [])
     
     if not schedule_ids:
-        return "🎉 Вихідний день!"
+        return f"Тиждень {selected_week[-1]}\n" + "🎉 Вихідний день!"
     
     subjects = user_data["schedule"]["subjects"]
     teachers = user_data["schedule"]["teachers"]
@@ -60,7 +61,7 @@ async def format_schedule_text(user_data: dict, day: str, selected_week: str) ->
         entry = f'{idx}. <a href="{subject["zoom_link"]}">{subject["name"]}</a> - {teacher_name}'
         schedule_entries.append(entry)
         
-    return f"🗓 <b>Тиждень {selected_week[-1]}</b>\n" + "\n".join(schedule_entries)
+    return f"Тиждень {selected_week[-1]}\n" + "\n".join(schedule_entries)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обробник команди /start з автоматичним виводом сьогоднішнього розкладу"""
@@ -68,7 +69,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_ref = db.collection("TG_USERS").document(str(user_id))
     user_doc = user_ref.get()
     
-    # Створення нового користувача
+    # Обробка нового користувача
     if not user_doc.exists:
         user_ref.set({
             "schedule": default_schedule,
@@ -76,36 +77,61 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "created_at": firestore.SERVER_TIMESTAMP,
             "starting_week": None
         })
-        text = "🔄 Будь ласка, встановіть дату початку семестру в налаштуваннях!"
-        return await update.message.reply_text(text, reply_markup=settings_keyboard())
+        await update.message.reply_text(
+            "🔄 Будь ласка, встановіть дату початку семестру!",
+            reply_markup=settings_keyboard()
+        )
+        return
     
     user_data = user_doc.to_dict()
     
     # Перевірка наявності starting_week
     if not user_data.get("starting_week"):
-        text = "⚠️ Спочатку встановіть дату початку семестру!"
-        return await update.message.reply_text(text, reply_markup=settings_keyboard())
-    
-    try:
-        repeat = user_data.get("schedule", {}).get("repeat", 1)
-        today = datetime.now()
-        current_week = get_current_week(user_data["starting_week"], repeat)
-        current_day = DAYS_ORDER[today.weekday()]
-        
-        schedule_text = await format_schedule_text(
-            user_data, 
-            current_day,
-            f"week{current_week}"
-        )
-        
         await update.message.reply_text(
-            f"📌 <b>Сьогодні ({today.strftime('%d.%m.%Y')})</b>\n{schedule_text}",
-            reply_markup=main_menu(),
-            parse_mode="HTML"
+            "⚠️ Спочатку встановіть дату початку семестру!",
+            reply_markup=settings_keyboard()
         )
+        return
+    
+    # Відправка розкладу з навігацією
+    await show_day_schedule(
+        user_id=user_id,
+        day=DAYS_ORDER[datetime.now().weekday()],
+        update_obj=update.message,
+        context=context
+    )
+
+
+async def show_day_schedule(user_id: int, day: str, update_obj, context: ContextTypes.DEFAULT_TYPE):
+    """Уніфікована функція для показу розкладу дня"""
+    try:
+        user_data = db.collection("TG_USERS").document(str(user_id)).get().to_dict()
         
+        if not user_data.get("starting_week"):
+            await update_obj.reply_text("⚠️ Спочатку встановіть дату семестру!", reply_markup=settings_keyboard())
+            return
+
+        repeat = user_data.get("schedule", {}).get("repeat", 1)
+        current_week = get_current_week(user_data["starting_week"], repeat)
+        schedule_text = await format_schedule_text(user_data, day, f"week{current_week}")
+        
+        # Розрахунок дати
+        today = datetime.now()
+        day_index = DAYS_ORDER.index(day)
+        target_date = today + timedelta(days=(day_index - today.weekday()))
+        date_str = target_date.strftime("%d.%m.%Y")
+
+        response = f"📅 <b>{day.capitalize()} ({date_str})</b>\n{schedule_text}"
+
+        # Відправка повідомлення
+        if isinstance(update_obj, CallbackQuery):
+            await update_obj.edit_message_text(response, parse_mode="HTML", reply_markup=main_menu())
+        else:
+            await update_obj.reply_text(response, parse_mode="HTML", reply_markup=main_menu())
+            
     except Exception as e:
-        await update.message.reply_text("❌ Помилка при завантаженні розкладу!")
+        error_msg = f"❌ Помилка: {str(e)}"
+        await update_obj.reply_text(error_msg)
 
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обробник всіх інлайн кнопок"""
@@ -113,6 +139,22 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     data = query.data
     user_id = query.from_user.id
+    # Додаємо обробники нових кнопок
+    if data in ['prev_day', 'next_day', 'today']:
+        current_day = context.user_data.get("current_day", DAYS_ORDER[datetime.now().weekday()])
+        current_index = DAYS_ORDER.index(current_day)
+        
+        if data == 'prev_day':
+            new_index = (current_index - 1) % 7
+        elif data == 'next_day':
+            new_index = (current_index + 1) % 7
+        else:  # today
+            new_index = datetime.now().weekday()
+        
+        new_day = DAYS_ORDER[new_index]
+        context.user_data["current_day"] = new_day
+        await show_day_schedule(user_id, new_day, query, context)
+        return
 
     if data == "schedule":
         await query.edit_message_text("📅 Оберіть день:", reply_markup=days_keyboard())
