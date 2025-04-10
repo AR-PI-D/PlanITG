@@ -17,6 +17,7 @@ from firebase_admin import firestore
 DAYS_ORDER = ["понеділок", "вівторок", "середа", "четвер", "п'ятниця", "субота", "неділя"]
 
 async def format_schedule_text(user_data: dict, day: str, selected_week: str) -> str:
+
     day_index = DAYS_ORDER.index(day)
     schedule_ids = user_data["schedule"]["schedule"][day_index].get(selected_week, [])
     
@@ -29,11 +30,23 @@ async def format_schedule_text(user_data: dict, day: str, selected_week: str) ->
     
     for idx, subject_id in enumerate(schedule_ids, start=1):
         subject = next((s for s in subjects if s["id"] == subject_id), None)
-        teacher = next((t for t in teachers if t["id"] == subject["teacher"]), None) if subject else None
+        teacher = next((t for t in teachers if t["id"] == (subject["teacher"] if subject else None)), None)
         
-        entry = f'{idx}. <a href="{subject["zoom_link"]}">{subject["name"]}</a> - {teacher["name"]}' if subject and teacher else f"{idx}. Помилка"
+        if not subject or not teacher:
+            schedule_entries.append(f"{idx}. Помилка даних")
+            continue
+            
+        teacher_name = teacher["name"]
+        contact = teacher.get("phone", "").strip()
+        
+        if contact.startswith("@"):
+            teacher_name = f'<a href="https://t.me/{contact[1:]}">{teacher_name}</a>'
+        elif contact:
+            teacher_name = f'{teacher_name} (<code>{contact}</code>)'
+                
+        entry = f'{idx}. <a href="{subject["zoom_link"]}">{subject["name"]}</a> - {teacher_name}'
         schedule_entries.append(entry)
-    
+        
     return "\n".join(schedule_entries)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
