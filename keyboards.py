@@ -95,3 +95,29 @@ def all_subjects_keyboard(subjects):
     ]
     keyboard.append([InlineKeyboardButton("↩️ Назад", callback_data="back_to_lessons")])
     return InlineKeyboardMarkup(keyboard)
+
+
+
+
+
+# keyboards.py
+
+# keyboards.py
+
+def settings_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Поточна дата 📅", callback_data='set_starting_week')],  # Змінено текст
+        [InlineKeyboardButton("↩️ Назад", callback_data='main_menu')]
+    ])
+# keyboards.py
+
+# keyboards.py
+
+def starting_week_keyboard():  # Немає аргументів у визначенні
+    buttons = [
+        [InlineKeyboardButton("Ввести дату 📝", callback_data='input_date_manually')],
+        [InlineKeyboardButton("Сьогодні ✅", callback_data='set_today')],
+        [InlineKeyboardButton("↩️ Назад", callback_data='settings')]
+    ]
+    return InlineKeyboardMarkup(buttons)
+

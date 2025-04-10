@@ -1,12 +1,15 @@
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, MessageHandler, filters
+from datetime import datetime
 from firestore import db
 from keyboards import (
     main_menu, 
     days_keyboard, 
     edit_day_keyboard,
     all_subjects_keyboard,
-    day_menu_keyboard
+    day_menu_keyboard,
+    settings_keyboard,
+    starting_week_keyboard
 )
 from default_schedule import default_schedule
 from firebase_admin import firestore
@@ -41,7 +44,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_ref.set({
             "schedule": default_schedule,
             "telegram_id": user_id,
-            "created_at": firestore.SERVER_TIMESTAMP
+            "created_at": firestore.SERVER_TIMESTAMP,
+            "starting_week": None
         })
     
     await update.message.reply_text("🏠 Головне меню:", reply_markup=main_menu())
@@ -103,6 +107,27 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("📅 Оберіть день:", reply_markup=days_keyboard())
     elif data == "main_menu":
         await query.edit_message_text("🏠 Головне меню:", reply_markup=main_menu())
+    elif data == 'settings':
+        await show_settings_menu(query, context, user_id)
+    elif data == 'set_starting_week':
+        await _update_starting_week(
+            context=context,
+            new_date=datetime.now().strftime("%Y-%m-%d"),
+            user_id=user_id,
+            query=query
+        )
+    elif data == 'input_date_manually':
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="📅 Введіть дату початкового тижня у форматі РРРР-ММ-ДД (наприклад, 2025-01-20):"
+        )
+    elif data == 'set_today':
+         await _update_starting_week(
+             context=context,
+             new_date=datetime.now().strftime("%Y-%m-%d"),
+             user_id=user_id,
+             query=query
+         )
 
 async def handle_day_selection(query, context, day, user_id):
     context.user_data.update({"current_day": day, "selected_week": "week1"})
@@ -132,4 +157,56 @@ async def return_to_day_view(query, context, user_id):
         text=f"📚 {context.user_data['current_day'].capitalize()} (week1):\n{schedule_text}",
         reply_markup=day_menu_keyboard(True),
         parse_mode="HTML"
+    )
+
+async def show_settings_menu(query, context, user_id):
+    await query.edit_message_text(
+        text="⚙️ Налаштування:",
+        reply_markup=settings_keyboard()
+    )
+
+# handlers.py
+# =============== handlers.py ===============
+
+async def _update_starting_week(context: ContextTypes.DEFAULT_TYPE, new_date: str, user_id: int, message=None, query=None):
+    """Уніфікована функція для оновлення дати"""
+    try:
+        # Перевірка коректності дати
+        datetime.strptime(new_date, "%Y-%m-%d")
+        user_ref = db.collection("TG_USERS").document(str(user_id))
+        
+        # Оновлення дати в базі
+        user_ref.update({'starting_week': new_date})
+        user_data = user_ref.get().to_dict()
+        current_date = user_data.get('starting_week', new_date)
+        
+        # Форматування відповіді
+        response_text = f"📅 Поточна дата: {current_date}"
+        
+        # Відправка повідомлення
+        if query:
+            await query.edit_message_text(response_text, reply_markup=starting_week_keyboard())
+        elif message:
+            await message.reply_text(response_text, reply_markup=starting_week_keyboard())
+            
+    except ValueError:
+        error_msg = "❌ Невірний формат даті!"
+        await message.reply_text(error_msg) if message else await query.answer(error_msg)
+
+
+# Оновлені обробники
+async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await _update_starting_week(
+        context=context,
+        new_date=update.message.text,
+        user_id=update.effective_user.id,
+        message=update.message
+    )
+
+async def set_today_as_starting_week(query, context: ContextTypes.DEFAULT_TYPE):
+    await _update_starting_week(
+        context=context,
+        new_date=datetime.now().strftime("%Y-%m-%d"),
+        user_id=query.from_user.id,
+        query=query
     )
