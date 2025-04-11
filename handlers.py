@@ -10,11 +10,17 @@ from keyboards import (
     edit_day_keyboard,
     all_subjects_keyboard,
     day_menu_keyboard,
+
     settings_keyboard,
     starting_week_keyboard,
     repeat_keyboard,
+
     teachers_keyboard,  # Додаємо новий імпорт
-    teacher_edit_keyboard  # І цей також
+    teacher_edit_keyboard,  # І цей також
+
+    subjects_keyboard,
+    subject_edit_keyboard,
+    teachers_list_keyboard
 )
 from default_schedule import default_schedule
 from firebase_admin import firestore
@@ -308,6 +314,57 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_ref.update({"schedule.teachers": updated_teachers})
         await show_teachers_list(query, context, user_id) 
 
+    elif data == 'manage_subjects':
+        await show_subjects_list(query, context, user_id)
+
+    elif data.startswith('subject_'):
+        subject_id = int(data.split('_')[1])
+        context.user_data['editing_subject'] = {'id': subject_id}
+        await show_subject_edit_menu(query, context, user_id)
+
+    elif data == 'add_subject':
+        new_subject = {
+            'id': generate_unique_id(),
+            'name': 'Новий предмет',
+            'teacher': 0,
+            'zoom_link': ''
+        }
+        user_ref = db.collection("TG_USERS").document(str(user_id))
+        user_ref.update({"schedule.subjects": firestore.ArrayUnion([new_subject])})
+        await show_subjects_list(query, context, user_id)
+
+    elif data.startswith('delete_subject_'):
+        subject_id = int(data.split('_')[2])
+        user_ref = db.collection("TG_USERS").document(str(user_id))
+        subjects = user_ref.get().to_dict().get("schedule", {}).get("subjects", [])
+        updated_subjects = [s for s in subjects if s['id'] != subject_id]
+        user_ref.update({"schedule.subjects": updated_subjects})
+        await show_subjects_list(query, context, user_id)
+
+    elif data == 'edit_subject_name':
+        await query.edit_message_text("✏️ Введіть нову назву предмету:")
+        context.user_data['editing_subject']['field'] = 'name'
+
+    elif data == 'edit_subject_link':
+        await query.edit_message_text("🔗 Введіть нове посилання:")
+        context.user_data['editing_subject']['field'] = 'zoom_link'
+
+    elif data == 'edit_subject_teacher':
+        user_data = db.collection("TG_USERS").document(str(user_id)).get().to_dict()
+        teachers = user_data.get("schedule", {}).get("teachers", [])
+        await query.edit_message_text("👨🏫 Оберіть викладача:", reply_markup=teachers_list_keyboard(teachers))
+
+    elif data.startswith('assign_teacher_'):
+        teacher_id = int(data.split('_')[2])
+        subject_id = context.user_data['editing_subject']['id']
+        user_ref = db.collection("TG_USERS").document(str(user_id))
+        subjects = user_ref.get().to_dict().get("schedule", {}).get("subjects", [])
+        for s in subjects:
+            if s['id'] == subject_id:
+                s['teacher'] = teacher_id
+        user_ref.update({"schedule.subjects": subjects})
+        await show_subject_edit_menu(query, context, user_id)
+
 async def show_teachers_list(query, context, user_id):
     user_ref = db.collection("TG_USERS").document(str(user_id))
     teachers = user_ref.get().to_dict().get("schedule", {}).get("teachers", [])
@@ -340,6 +397,22 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=teacher_edit_keyboard()
         )
         return  # Зупиняємо подальшу обробку
+    
+    if 'editing_subject' in context.user_data:
+        edit_data = context.user_data['editing_subject']
+        field = edit_data.get('field')
+        subject_id = edit_data['id']
+        
+        user_ref = db.collection("TG_USERS").document(str(user_id))
+        subjects = user_ref.get().to_dict().get("schedule", {}).get("subjects", [])
+        
+        for subject in subjects:
+            if subject['id'] == subject_id:
+                subject[field] = text
+                break
+                
+        user_ref.update({"schedule.subjects": subjects})
+        await show_subject_edit_menu(update.message, context, user_id)
     
     # Обробка дати...
     # Обробка дати (лише якщо не в режимі редагування)
@@ -447,3 +520,41 @@ async def _update_starting_week(context: ContextTypes.DEFAULT_TYPE, new_date: st
     except ValueError:
         error = "❌ Невірний формат! Використовуйте РРРР-ММ-ДД (напр. 2024-09-01)"
         await message.reply_text(error) if message else await query.answer(error)
+
+
+# Відображення списку предметів
+async def show_subjects_list(query, context, user_id):
+    user_ref = db.collection("TG_USERS").document(str(user_id))
+    subjects = user_ref.get().to_dict().get("schedule", {}).get("subjects", [])
+    await query.edit_message_text("📚 Список занять:", reply_markup=subjects_keyboard(subjects))
+
+# Відображення меню редагування предмету
+async def show_subject_edit_menu(update_or_query, context, user_id):
+    subject_id = context.user_data['editing_subject']['id']
+    user_ref = db.collection("TG_USERS").document(str(user_id))
+    user_data = user_ref.get().to_dict()
+    subjects = user_data.get("schedule", {}).get("subjects", [])
+    teachers = user_data.get("schedule", {}).get("teachers", [])
+    
+    subject = next((s for s in subjects if s['id'] == subject_id), None)
+    
+    if subject:
+        teacher = next((t for t in teachers if t['id'] == subject['teacher']), None)
+        teacher_name = teacher['name'] if teacher else "Не обрано"
+        
+        text = (
+            f"📝 Редагування предмету:\n"
+            f"▪️ Назва: {subject['name']}\n"
+            f"▪️ Викладач: {teacher_name}\n"
+            f"▪️ Посилання: {subject.get('zoom_link', 'немає')}"
+        )
+        
+        # Визначаємо, як відправити повідомлення
+        if isinstance(update_or_query, CallbackQuery):
+            await update_or_query.edit_message_text(text, reply_markup=subject_edit_keyboard())
+        else:
+            await context.bot.send_message(
+                chat_id=update_or_query.chat_id,
+                text=text,
+                reply_markup=subject_edit_keyboard()
+            )

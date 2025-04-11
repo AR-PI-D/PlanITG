@@ -113,10 +113,10 @@ def settings_keyboard(current_repeat: int = 1):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Поточна дата 📅", callback_data='set_starting_week')],
         [InlineKeyboardButton(f"Кількість тижнів 🔄 ({current_repeat})", callback_data='set_repeat')],
-        [InlineKeyboardButton("Викладачі 👨🏫", callback_data='manage_teachers')],  # Нова кнопка
+        [InlineKeyboardButton("Викладачі 👨🏫", callback_data='manage_teachers')],
+        [InlineKeyboardButton("Заняття 📚", callback_data='manage_subjects')],  # Нова кнопка
         [InlineKeyboardButton("↩️ Назад", callback_data='main_menu')]
     ])
-
 # keyboards.py
 # keyboards.py
 def teachers_keyboard(teachers):
@@ -173,3 +173,36 @@ def starting_week_keyboard():  # Немає аргументів у визнач
     ]
     return InlineKeyboardMarkup(buttons)
 
+
+# Клавіатура списку предметів
+def subjects_keyboard(subjects):
+    buttons = []
+    for subject in subjects:
+        btn_text = f"{subject['name']} ({subject.get('zoom_link', 'немає посилання')})"
+        row = [
+            InlineKeyboardButton(btn_text, callback_data=f"subject_{subject['id']}"),
+            InlineKeyboardButton("❌", callback_data=f"delete_subject_{subject['id']}")
+        ]
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton("➕ Додати заняття", callback_data="add_subject")])
+    buttons.append([InlineKeyboardButton("↩️ Назад", callback_data="settings")])
+    return InlineKeyboardMarkup(buttons)
+
+# Клавіатура редагування предмету
+def subject_edit_keyboard():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✏️ Назва", callback_data="edit_subject_name"),
+            InlineKeyboardButton("🔗 Посилання", callback_data="edit_subject_link")
+        ],
+        [InlineKeyboardButton("👨🏫 Викладач", callback_data="edit_subject_teacher")],
+        [InlineKeyboardButton("🗑️ Видалити", callback_data="delete_subject")],
+        [InlineKeyboardButton("← Назад", callback_data="manage_subjects")]
+    ])
+
+# Клавіатура вибору викладача для предмету
+def teachers_list_keyboard(teachers):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t['name'], callback_data=f"assign_teacher_{t['id']}")] 
+        for t in teachers
+    ])
