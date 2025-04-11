@@ -117,13 +117,32 @@ def settings_keyboard(current_repeat: int = 1):
         [InlineKeyboardButton("↩️ Назад", callback_data='main_menu')]
     ])
 
+# keyboards.py
+# keyboards.py
 def teachers_keyboard(teachers):
-    buttons = [
-        [InlineKeyboardButton(f"{t['name']} - {t.get('contact', 'немає')}", callback_data=f"teacher_{t['id']}")]
-        for t in teachers
-    ]
+    buttons = []
+    for teacher in teachers:
+        is_new = not teacher.get('name')
+        
+        # Визначення тексту кнопки
+        if is_new:
+            btn_text = "🆕 Новий викладач"
+        else:
+            contact = teacher.get('contact', '')
+            btn_text = f"{teacher['name']} ({contact})" if contact else teacher['name']
+        
+        # Єдиний callback формат
+        callback_data = f"teacher_{teacher['id']}"
+        
+        row = [
+            InlineKeyboardButton(btn_text, callback_data=callback_data),
+            InlineKeyboardButton("❌", callback_data=f"delete_teacher_{teacher['id']}")
+        ]
+        buttons.append(row)
+    
     buttons.append([InlineKeyboardButton("➕ Додати викладача", callback_data="add_teacher")])
     buttons.append([InlineKeyboardButton("↩️ Назад", callback_data="settings")])
+    
     return InlineKeyboardMarkup(buttons)
 
 def teacher_edit_keyboard():
@@ -133,7 +152,7 @@ def teacher_edit_keyboard():
             InlineKeyboardButton("📞 Контакт", callback_data="edit_teacher_contact")
         ],
         [InlineKeyboardButton("🗑️ Видалити", callback_data="delete_teacher")],
-        [InlineKeyboardButton("↩️ Назад", callback_data="manage_teachers")]
+        [InlineKeyboardButton("← Назад до списку", callback_data="manage_teachers")]
     ])
 
 def repeat_keyboard(current_repeat: int):

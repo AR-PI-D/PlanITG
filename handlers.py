@@ -250,33 +250,63 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'manage_teachers':
         await show_teachers_list(query, context, user_id)
         
-    elif data == 'add_teacher':
-        context.user_data['editing_teacher'] = {'mode': 'add'}
-        await query.edit_message_text("Введіть ім'я викладача:")
-        
-    elif data.startswith('teacher_'):
-        teacher_id = int(data.split('_')[1])
-        context.user_data['editing_teacher'] = {
-            'mode': 'edit',
-            'id': teacher_id
-        }
-        await query.edit_message_text(
-            "Оберіть дію:",
-            reply_markup=teacher_edit_keyboard()
-        )
-        
     elif data == 'edit_teacher_name':
-        await query.edit_message_text("Введіть нове ім'я викладача:")
+        await query.edit_message_text("✏️ Введіть ім'я викладача:")
         context.user_data['editing_teacher']['field'] = 'name'
-        
+
     elif data == 'edit_teacher_contact':
-        await query.edit_message_text("Введіть новий контакт (@username або номер телефону):")
+        await query.edit_message_text("📞 Введіть контакт (@username або номер):")
         context.user_data['editing_teacher']['field'] = 'contact'
-        
+
+       
     elif data == 'delete_teacher':
         await delete_teacher(context, user_id)
         await show_teachers_list(query, context, user_id)
+    elif data == 'add_teacher':
+        # Створення пустого викладача
+        new_teacher = {
+            'id': generate_unique_id(),
+            'name': '',
+            'contact': ''
+        }
+
+        # Додавання до бази даних
+        user_ref = db.collection("TG_USERS").document(str(user_id))
+        user_ref.update({"schedule.teachers": firestore.ArrayUnion([new_teacher])})
+
+        # Оновлення списку викладачів
+        await show_teachers_list(query, context, user_id)
+
+    elif data.startswith('teacher_'):
+        teacher_id = int(data.split('_')[1])
+        user_ref = db.collection("TG_USERS").document(str(user_id))
+        teachers = user_ref.get().to_dict().get("schedule", {}).get("teachers", [])
         
+        teacher = next((t for t in teachers if t['id'] == teacher_id), None)
+        
+        if teacher:
+            # Зберігаємо ID викладача у контексті
+            context.user_data['editing_teacher'] = {'id': teacher_id}
+            
+            # Показуємо стандартне меню для всіх
+            await query.edit_message_text(
+                "🛠 Оберіть дію:",
+                reply_markup=teacher_edit_keyboard()  # Однакова клавіатура
+            )
+
+    elif data.startswith('delete_teacher_'):
+        teacher_id = int(data.split('_')[2])
+        user_ref = db.collection("TG_USERS").document(str(user_id))
+        
+        # Отримуємо поточний список викладачів
+        teachers = user_ref.get().to_dict().get("schedule", {}).get("teachers", [])
+        
+        # Фільтруємо видаляємий елемент
+        updated_teachers = [t for t in teachers if t['id'] != teacher_id]
+        
+        # Оновлюємо базу даних
+        user_ref.update({"schedule.teachers": updated_teachers})
+        await show_teachers_list(query, context, user_id) 
 
 async def show_teachers_list(query, context, user_id):
     user_ref = db.collection("TG_USERS").document(str(user_id))
@@ -290,44 +320,28 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
     
-    # Якщо активний режим редагування викладача
     if 'editing_teacher' in context.user_data:
-        editing_data = context.user_data['editing_teacher']
+        edit_data = context.user_data['editing_teacher']
+        teacher_id = edit_data['id']
+        field = edit_data.get('field')
         
-        # Обробка імені
-        if 'field' not in editing_data:
-            context.user_data['editing_teacher']['name'] = text
-            await update.message.reply_text("📞 Введіть контакт (@username або номер):")
-            context.user_data['editing_teacher']['field'] = 'contact'
-            return
+        # Оновлюємо поле викладача
+        user_ref = db.collection("TG_USERS").document(str(user_id))
+        teachers = user_ref.get().to_dict()["schedule"]["teachers"]
+        for t in teachers:
+            if t['id'] == teacher_id:
+                t[field] = text
+                break
+        user_ref.update({"schedule.teachers": teachers})
         
-        # Обробка контакту
-        contact = text
-        if not (contact.startswith('@') or contact.replace('+', '').isdigit()):
-            await update.message.reply_text("❌ Невірний формат контакту!")
-            return
-        
-        # Збереження викладача
-        if editing_data['mode'] == 'add':
-            new_teacher = {
-                'id': get_next_teacher_id(user_id),
-                'name': editing_data['name'],
-                'contact': contact
-            }
-            await update_teacher_in_db(user_id, new_teacher)
-        else:
-            await update_teacher_field(
-                user_id=user_id,
-                teacher_id=editing_data['id'],
-                field=editing_data['field'],
-                value=contact
-            )
-        
-        # Важливо: очищаємо контекст після збереження
-        del context.user_data['editing_teacher']
-        await show_teachers_list_after_edit(context, user_id, update.message)
-        return
+        # Повертаємо користувача в меню редагування
+        await update.message.reply_text(
+            "🔄 Оберіть наступну дію:",
+            reply_markup=teacher_edit_keyboard()
+        )
+        return  # Зупиняємо подальшу обробку
     
+    # Обробка дати...
     # Обробка дати (лише якщо не в режимі редагування)
     try:
         datetime.strptime(text, "%Y-%m-%d")
