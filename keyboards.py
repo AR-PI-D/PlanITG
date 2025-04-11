@@ -112,8 +112,28 @@ def all_subjects_keyboard(subjects):
 def settings_keyboard(current_repeat: int = 1):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Поточна дата 📅", callback_data='set_starting_week')],
-        [InlineKeyboardButton(f"Кількість тижнів 🔄 ({current_repeat})", callback_data='set_repeat')],  # Нова кнопка
+        [InlineKeyboardButton(f"Кількість тижнів 🔄 ({current_repeat})", callback_data='set_repeat')],
+        [InlineKeyboardButton("Викладачі 👨🏫", callback_data='manage_teachers')],  # Нова кнопка
         [InlineKeyboardButton("↩️ Назад", callback_data='main_menu')]
+    ])
+
+def teachers_keyboard(teachers):
+    buttons = [
+        [InlineKeyboardButton(f"{t['name']} - {t.get('contact', 'немає')}", callback_data=f"teacher_{t['id']}")]
+        for t in teachers
+    ]
+    buttons.append([InlineKeyboardButton("➕ Додати викладача", callback_data="add_teacher")])
+    buttons.append([InlineKeyboardButton("↩️ Назад", callback_data="settings")])
+    return InlineKeyboardMarkup(buttons)
+
+def teacher_edit_keyboard():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✏️ Ім'я", callback_data="edit_teacher_name"),
+            InlineKeyboardButton("📞 Контакт", callback_data="edit_teacher_contact")
+        ],
+        [InlineKeyboardButton("🗑️ Видалити", callback_data="delete_teacher")],
+        [InlineKeyboardButton("↩️ Назад", callback_data="manage_teachers")]
     ])
 
 def repeat_keyboard(current_repeat: int):
