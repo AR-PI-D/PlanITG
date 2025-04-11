@@ -152,7 +152,7 @@ def teacher_edit_keyboard():
             InlineKeyboardButton("📞 Контакт", callback_data="edit_teacher_contact")
         ],
         [InlineKeyboardButton("🗑️ Видалити", callback_data="delete_teacher")],
-        [InlineKeyboardButton("← Назад до списку", callback_data="manage_teachers")]
+        [InlineKeyboardButton("← До списку", callback_data="manage_teachers")]
     ])
 
 def repeat_keyboard(current_repeat: int):
@@ -178,7 +178,7 @@ def starting_week_keyboard():  # Немає аргументів у визнач
 def subjects_keyboard(subjects):
     buttons = []
     for subject in subjects:
-        btn_text = f"{subject['name']} ({subject.get('zoom_link', 'немає посилання')})"
+        btn_text = subject['name']
         row = [
             InlineKeyboardButton(btn_text, callback_data=f"subject_{subject['id']}"),
             InlineKeyboardButton("❌", callback_data=f"delete_subject_{subject['id']}")

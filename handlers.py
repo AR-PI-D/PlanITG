@@ -257,16 +257,19 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_teachers_list(query, context, user_id)
         
     elif data == 'edit_teacher_name':
-        await query.edit_message_text("✏️ Введіть ім'я викладача:")
+        await query.edit_message_text("✏️ Введіть нове ім'я:")
         context.user_data['editing_teacher']['field'] = 'name'
 
     elif data == 'edit_teacher_contact':
-        await query.edit_message_text("📞 Введіть контакт (@username або номер):")
+        await query.edit_message_text("📞 Введіть новий контакт:")
         context.user_data['editing_teacher']['field'] = 'contact'
 
-       
     elif data == 'delete_teacher':
-        await delete_teacher(context, user_id)
+        teacher_id = context.user_data['editing_teacher']['id']
+        user_ref = db.collection("TG_USERS").document(str(user_id))
+        teachers = user_ref.get().to_dict().get("schedule", {}).get("teachers", [])
+        updated_teachers = [t for t in teachers if t['id'] != teacher_id]
+        user_ref.update({"schedule.teachers": updated_teachers})
         await show_teachers_list(query, context, user_id)
     elif data == 'add_teacher':
         # Створення пустого викладача
@@ -285,20 +288,8 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith('teacher_'):
         teacher_id = int(data.split('_')[1])
-        user_ref = db.collection("TG_USERS").document(str(user_id))
-        teachers = user_ref.get().to_dict().get("schedule", {}).get("teachers", [])
-        
-        teacher = next((t for t in teachers if t['id'] == teacher_id), None)
-        
-        if teacher:
-            # Зберігаємо ID викладача у контексті
-            context.user_data['editing_teacher'] = {'id': teacher_id}
-            
-            # Показуємо стандартне меню для всіх
-            await query.edit_message_text(
-                "🛠 Оберіть дію:",
-                reply_markup=teacher_edit_keyboard()  # Однакова клавіатура
-            )
+        context.user_data['editing_teacher'] = {'id': teacher_id}
+        await show_teacher_edit_menu(query, context, user_id)
 
     elif data.startswith('delete_teacher_'):
         teacher_id = int(data.split('_')[2])
@@ -379,24 +370,20 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if 'editing_teacher' in context.user_data:
         edit_data = context.user_data['editing_teacher']
-        teacher_id = edit_data['id']
         field = edit_data.get('field')
+        teacher_id = edit_data['id']
         
-        # Оновлюємо поле викладача
         user_ref = db.collection("TG_USERS").document(str(user_id))
-        teachers = user_ref.get().to_dict()["schedule"]["teachers"]
-        for t in teachers:
-            if t['id'] == teacher_id:
-                t[field] = text
-                break
-        user_ref.update({"schedule.teachers": teachers})
+        teachers = user_ref.get().to_dict().get("schedule", {}).get("teachers", [])
         
-        # Повертаємо користувача в меню редагування
-        await update.message.reply_text(
-            "🔄 Оберіть наступну дію:",
-            reply_markup=teacher_edit_keyboard()
-        )
-        return  # Зупиняємо подальшу обробку
+        for teacher in teachers:
+            if teacher['id'] == teacher_id:
+                teacher[field] = text
+                break
+        
+        user_ref.update({"schedule.teachers": teachers})
+        await show_teacher_edit_menu(update.message, context, user_id)
+        return
     
     if 'editing_subject' in context.user_data:
         edit_data = context.user_data['editing_subject']
@@ -424,9 +411,10 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id=user_id,
             message=update.message
         )
+        return  # Зупиняємо подальшу обробку
     except ValueError:
-        await update.message.reply_text("❌ Невірний формат дати! Використовуйте РРРР-ММ-ДД")
-
+        pass
+    
 async def update_teacher_in_db(user_id: int, teacher_data: dict):
     user_ref = db.collection("TG_USERS").document(str(user_id))
     user_ref.update({
@@ -501,8 +489,8 @@ async def show_settings_menu(query, context, user_id):
 
 async def _update_starting_week(context: ContextTypes.DEFAULT_TYPE, new_date: str, user_id: int, message=None, query=None):
     """Оновлення дати початку семестру"""
-    # Перевірка на активний режим редагування
-    if context.user_data.get('editing_teacher'):
+    # Перевірка на активний режим редагування (викладачів або предметів)
+    if context.user_data.get('editing_teacher') or context.user_data.get('editing_subject'):
         return  # Не обробляємо дату, якщо йде редагування
         
     try:
@@ -521,12 +509,36 @@ async def _update_starting_week(context: ContextTypes.DEFAULT_TYPE, new_date: st
         error = "❌ Невірний формат! Використовуйте РРРР-ММ-ДД (напр. 2024-09-01)"
         await message.reply_text(error) if message else await query.answer(error)
 
-
 # Відображення списку предметів
 async def show_subjects_list(query, context, user_id):
     user_ref = db.collection("TG_USERS").document(str(user_id))
     subjects = user_ref.get().to_dict().get("schedule", {}).get("subjects", [])
     await query.edit_message_text("📚 Список занять:", reply_markup=subjects_keyboard(subjects))
+
+async def show_teacher_edit_menu(update_or_query, context, user_id):
+    teacher_id = context.user_data['editing_teacher']['id']
+    user_ref = db.collection("TG_USERS").document(str(user_id))
+    user_data = user_ref.get().to_dict()
+    teachers = user_data.get("schedule", {}).get("teachers", [])
+    
+    teacher = next((t for t in teachers if t['id'] == teacher_id), None)
+    
+    if teacher:
+        text = (
+            f"👨🏫 Редагування викладача:\n"
+            f"▪️ Ім'я: {teacher.get('name', 'Не вказано')}\n"
+            f"▪️ Контакт: {teacher.get('contact', 'Не вказано')}"
+        )
+        
+        # Визначаємо тип об'єкта для відправки
+        if isinstance(update_or_query, CallbackQuery):
+            await update_or_query.edit_message_text(text, reply_markup=teacher_edit_keyboard())
+        else:
+            await context.bot.send_message(
+                chat_id=update_or_query.chat_id,
+                text=text,
+                reply_markup=teacher_edit_keyboard()
+            )
 
 # Відображення меню редагування предмету
 async def show_subject_edit_menu(update_or_query, context, user_id):
