@@ -136,6 +136,7 @@ def teachers_keyboard(teachers):
         
         row = [
             InlineKeyboardButton(btn_text, callback_data=callback_data),
+            # Має бути патерн delete_teacher_<ID>
             InlineKeyboardButton("❌", callback_data=f"delete_teacher_{teacher['id']}")
         ]
         buttons.append(row)
@@ -145,13 +146,13 @@ def teachers_keyboard(teachers):
     
     return InlineKeyboardMarkup(buttons)
 
-def teacher_edit_keyboard():
+def teacher_edit_keyboard(teacher_id: int):
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("✏️ Ім'я", callback_data="edit_teacher_name"),
             InlineKeyboardButton("📞 Контакт", callback_data="edit_teacher_contact")
         ],
-        [InlineKeyboardButton("🗑️ Видалити", callback_data="delete_teacher")],
+        [InlineKeyboardButton("🗑️ Видалити", callback_data=f"delete_teacher_{teacher_id}")],
         [InlineKeyboardButton("← До списку", callback_data="manage_teachers")]
     ])
 
